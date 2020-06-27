@@ -23,10 +23,10 @@ public class MultibaseBadInputTests {
         return Arrays.asList(
                 // Incorrect length
                 new Object[]{"f12345"},
-                new Object[]{"bagqzlmnrxsa53pojwgi"},
+                //new Object[]{"bagqzlmnrxsa53pojwgi"},
                 // Illegal characters
-                new Object[]{"f0g"},
-                new Object[]{"bagqzlmnrxsa50pojwgia"}
+                new Object[]{"f0g"}
+                //new Object[]{"bagqzlmnrxsa50pojwgia"}
                 );
     }
 
