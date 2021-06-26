@@ -24,7 +24,7 @@ public class BoxingKeyPair implements Cborable
                 secretBoxingKey.toCbor()));
     }
 
-    public static BoxingKeyPair fromCbor(CborObject cbor) {
+    public static BoxingKeyPair fromCbor(Cborable cbor) {
         if (! (cbor instanceof CborObject.CborList))
             throw new IllegalStateException("Incorrect cbor for SigningKeyPair: " + cbor);
 

@@ -19,16 +19,12 @@ public class UserStaticData implements Cborable {
         this.allEntryPoints = allEntryPoints;
     }
 
-    public UserStaticData(List<EntryPoint> staticData, SymmetricKey rootKey) {
-        this(PaddedCipherText.build(rootKey, new EntryPoints(EntryPoints.VERSION, staticData), PADDING_BLOCK_SIZE));
+    public UserStaticData(List<EntryPoint> staticData, SymmetricKey rootKey, Optional<BoxingKeyPair> boxer) {
+        this(PaddedCipherText.build(rootKey, new EntryPoints(EntryPoints.CURRENT_VERSION, staticData, boxer), PADDING_BLOCK_SIZE));
     }
 
-    public UserStaticData(SymmetricKey rootKey) {
-        this(new ArrayList<>(), rootKey);
-    }
-
-    public List<EntryPoint> getEntryPoints(SymmetricKey rootKey) {
-        return allEntryPoints.decrypt(rootKey, EntryPoints::fromCbor).entries;
+    public EntryPoints getData(SymmetricKey rootKey) {
+        return allEntryPoints.decrypt(rootKey, EntryPoints::fromCbor);
     }
 
     @Override
@@ -40,38 +36,44 @@ public class UserStaticData implements Cborable {
         return new UserStaticData(PaddedCipherText.fromCbor(cbor));
     }
 
-    private static class EntryPoints implements Cborable {
-        private static final int VERSION = 0;
+    public static class EntryPoints implements Cborable {
+        private static final int CURRENT_VERSION = 2;
 
         private final long version;
-        private final List<EntryPoint> entries;
+        public final List<EntryPoint> entries;
+        public final Optional<BoxingKeyPair> boxer; // this is only absent on legacy accounts
 
-        public EntryPoints(long version, List<EntryPoint> entries) {
+        public EntryPoints(long version, List<EntryPoint> entries, Optional<BoxingKeyPair> boxer) {
             this.version = version;
             this.entries = entries;
+            this.boxer = boxer;
         }
 
         @Override
         public CborObject toCbor() {
             Map<String, Cborable> res = new TreeMap<>();
-            res.put("v", new CborObject.CborLong(VERSION));
+            res.put("v", new CborObject.CborLong(version));
             res.put("e", new CborObject.CborList(entries.stream()
                     .map(EntryPoint::toCbor)
                     .collect(Collectors.toList())));
+            boxer.ifPresent(p -> res.put("b", p));
             return CborObject.CborMap.build(res);
         }
 
         public static EntryPoints fromCbor(Cborable cbor) {
             if (! (cbor instanceof CborObject.CborMap))
                 throw new IllegalStateException("Incorrect cbor type for EntryPoints: " + cbor);
-            long version = ((CborObject.CborMap) cbor).getLong("v");
-            if (version != VERSION)
+            CborObject.CborMap m = (CborObject.CborMap) cbor;
+            long version = m.getLong("v");
+            if (version > CURRENT_VERSION)
                 throw new IllegalStateException("Unknown UserStaticData version: " + version);
+            Optional<BoxingKeyPair> boxer = m.getOptional("b", BoxingKeyPair::fromCbor);
             return new EntryPoints(version,
-                    ((CborObject.CborMap) cbor).getList("e")
+                    m.getList("e")
                             .value.stream()
                             .map(EntryPoint::fromCbor)
-                            .collect(Collectors.toList()));
+                            .collect(Collectors.toList()),
+                    boxer);
         }
     }
 }

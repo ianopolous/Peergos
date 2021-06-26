@@ -187,6 +187,7 @@ public class WriterData implements Cborable {
                                                                           SigningPrivateKeyAndPublicHash writer,
                                                                           Optional<PublicKeyHash> followRequestReceiver,
                                                                           SymmetricKey rootKey,
+                                                                          Optional<BoxingKeyPair> boxer,
                                                                           SecretGenerationAlgorithm algorithm,
                                                                           ContentAddressedStorage ipfs,
                                                                           Hasher hasher,
@@ -198,7 +199,7 @@ public class WriterData implements Cborable {
                         followRequestReceiver,
                         Optional.of(ownedRoot),
                         Collections.emptyMap(),
-                        Optional.of(new UserStaticData(rootKey)),
+                        Optional.of(new UserStaticData(Collections.emptyList(), rootKey, boxer)),
                         Optional.empty()));
     }
 
@@ -208,7 +209,7 @@ public class WriterData implements Cborable {
 
     public CompletableFuture<WriterData> changeKeys(SigningPrivateKeyAndPublicHash oldSigner,
                                                     SigningPrivateKeyAndPublicHash signer,
-                                                    PublicBoxingKey followRequestReceiver,
+                                                    BoxingKeyPair followRequestReceiver,
                                                     SymmetricKey currentKey,
                                                     SymmetricKey newKey,
                                                     SecretGenerationAlgorithm newAlgorithm,
@@ -219,11 +220,15 @@ public class WriterData implements Cborable {
         return network.synchronizer.applyUpdate(oldSigner.publicKeyHash, signer,
                 (wd, tid) -> {
                     Optional<UserStaticData> newEntryPoints = staticData
-                            .map(sd -> new UserStaticData(sd.getEntryPoints(currentKey), newKey));
+                            .map(sd -> {
+                                UserStaticData.EntryPoints staticData = sd.getData(currentKey);
+                                Optional<BoxingKeyPair> boxer = Optional.of(staticData.boxer.orElse(followRequestReceiver));
+                                return new UserStaticData(staticData.entries, newKey, boxer);
+                            });
                     return network.hasher.sha256(followRequestReceiver.serialize())
                             .thenCompose(boxerHash -> network.dhtClient.putBoxingKey(oldSigner.publicKeyHash,
                             oldSigner.secret.signMessage(boxerHash),
-                            followRequestReceiver, tid
+                            followRequestReceiver.publicBoxingKey, tid
                     )).thenCompose(boxerHash -> OwnedKeyChamp.createEmpty(oldSigner.publicKeyHash, oldSigner,
                             network.dhtClient, network.hasher, tid)
                             .thenCompose(ownedRoot -> {
