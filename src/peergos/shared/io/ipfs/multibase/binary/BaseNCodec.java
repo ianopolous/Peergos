@@ -394,6 +394,7 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
         if (pArray == null || pArray.length == 0) {
             return pArray;
         }
+        checkLength(pArray.length);
         final Context context = new Context();
         decode(pArray, 0, pArray.length, context);
         decode(pArray, 0, EOF, context); // Notify decoder of EOF.
@@ -529,5 +530,35 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
             len += ((len + lineLength-1) / lineLength) * chunkSeparatorLength;
         }
         return len;
+    }
+
+    private void checkLength(int inputLength) {
+        int bitsPerChar = 8 * unencodedBlockSize / encodedBlockSize;
+        int bitsInUnderfullBlock = (inputLength % encodedBlockSize) * bitsPerChar;
+        /*
+         * Underfull block length for base16:
+         *   4 bit --- bad
+         *
+         * Underfull block length for base32:
+         *   5 bit --- bad
+         *  10 bit --- OK, discard last 2 bits
+         *  15 bit --- bad
+         *  20 bit --- OK, discard last 4 bits
+         *  25 bit --- OK, discard last 7 bits
+         *  30 bit --- bad
+         *  35 bit --- OK, discard last 3 bits
+         *
+         * Underfull block length for base64:
+         *   6 bit --- bad
+         *  12 bit --- OK, discard last 4 bits
+         *  18 bit --- OK, discard last 2 bits
+         */
+        int padBitsCount = bitsInUnderfullBlock % 8;
+        if(padBitsCount >= bitsPerChar) throw new IllegalArgumentException(String.format("Illegal input length: %d", inputLength));
+//        if(padBitsCount > 0) {
+//            char lastCharacter = input.charAt(input.length() - 1);
+//            int lastValue = alphabet.indexOf(lastCharacter);
+//            if(lastValue != 0 && Integer.lowestOneBit(lastValue) < 1 << (padBitsCount)) throw new NonZeroPadException(lastCharacter);
+//        }
     }
 }
