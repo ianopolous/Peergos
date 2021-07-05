@@ -25,10 +25,10 @@ public interface FileSystem {
      */
     String user();
 
-    byte[] read(Path path, BiConsumer<Long, Long> progressConsumer);
+    byte[] read(Path path, Consumer<Long> progressConsumer);
 
     default byte[] read(Path path) {
-        return read(path, (a,b) -> {});
+        return read(path, (a) -> {});
     }
 
     void write(Path path, byte[] data, Consumer<Long> progressConsumer);

@@ -1,28 +1,66 @@
 package peergos.server.cli;
 
 import java.io.PrintWriter;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class ProgressBar {
+public class ProgressBar implements Runnable {
 
     private static final String[] ANIM = new String[]{"|", "/", "-", "\\"};
-    private static final int PROGRESS_BAR_LENGTH = 20;
-    private long accumulatedBytes;
-    private int animationPosition;
 
-    public void update(PrintWriter writer, long bytesSoFar, long totalBytes) {
-        String msg = format(bytesSoFar, totalBytes);
-        writer.print(msg);
-        writer.flush();
+    private static final int DEFAULT_PROGRESS_BAR_LENGTH = 20;
+    private static final int DEFAULT_TICK_LENGTH_MILLIS = 250;
+
+    private AtomicLong accumulatedBytes = new AtomicLong();
+    private final Thread runner;
+    private final long tickLengthMillis;
+    private final long totalSize;
+    private final int progressBarLength;
+
+    private volatile boolean isFinsished, isStarted;
+    private int animationPosition;
+    //guarded by this
+    private PrintWriter writer;
+
+    public ProgressBar(PrintWriter writer, long totalSize) {
+        this(writer, totalSize, DEFAULT_PROGRESS_BAR_LENGTH, DEFAULT_TICK_LENGTH_MILLIS);;
     }
 
-    private String progressBar(long bytes, long  total) {
-        accumulatedBytes += bytes;
-        double frac =  (double) accumulatedBytes / (double) total;
-        int barsProgressed = (int) (frac * PROGRESS_BAR_LENGTH);
+    public synchronized void start() {
+        if  (this.isFinsished)
+            throw new IllegalStateException();
+        if (this.isStarted)
+            throw new IllegalStateException();
+        this.isStarted = true;
+        runner.start();
+    }
+
+    public synchronized void join() {
+        while (runner.isAlive())
+            try {
+                runner.join();
+                return;
+            } catch (InterruptedException ie) {}
+    }
+
+    public ProgressBar(PrintWriter writer, long totalSize, int progressBarLength, long tickLengthMillis) {
+        this.writer = writer;
+        this.tickLengthMillis = tickLengthMillis;
+        this.totalSize = totalSize;
+        this.progressBarLength = progressBarLength;
+        this.runner = new Thread(this::run);
+    }
+
+    public void update(long update) {
+        accumulatedBytes.addAndGet(update);
+    }
+
+    private String progressBar(long currentAccumulated) {
+        double frac =  (double) currentAccumulated / (double) totalSize;
+        int barsProgressed = (int) (frac * progressBarLength);
 
         StringBuilder sb = new StringBuilder();
         sb.append('[');
-        for (int i = 0; i < PROGRESS_BAR_LENGTH; i++) {
+        for (int i = 0; i < progressBarLength; i++) {
             if (i <= barsProgressed)
                 sb.append('=');
             else
@@ -32,27 +70,62 @@ public class ProgressBar {
         return sb.toString();
     }
 
-    private String format(long bytes, long total) {
+    private String format(boolean isUpdated,  long currentAccumumated) {
         StringBuilder sb =  new StringBuilder("\r");
-        sb.append(updateAndGetAnimation());
+        sb.append(getAnimation(isUpdated));
         sb.append("\t");
-        sb.append(progressBar(bytes, total));
+        sb.append(progressBar(currentAccumumated));
         sb.append("\t");
         return sb.toString();
 
     }
 
-    private String updateAndGetAnimation() {
-        return ANIM[animationPosition++ % ANIM.length];
+    private String getAnimation(boolean update) {
+        if (update)
+            animationPosition++;
+        return ANIM[animationPosition % ANIM.length];
+    }
+
+    /**
+     *
+     * @return  current accumulated total.
+     */
+    private long tick(long previousAccumulated) {
+        long currentAccumulated = accumulatedBytes.get();
+        boolean isUpdated = currentAccumulated != previousAccumulated;
+        String msg = format(isUpdated, currentAccumulated);
+        writer.print(msg);
+
+        if (currentAccumulated >= totalSize) {
+            isFinsished = true;
+            writer.println();
+        }
+        writer.flush();
+        return currentAccumulated;
+    }
+
+    @Override
+    public void run() {
+        long previousAcc = 0;
+        do {
+            long currentAcc = tick(previousAcc);
+            previousAcc = currentAcc;
+            try {
+                Thread.sleep(tickLengthMillis);
+            } catch (InterruptedException ie) {}
+
+        } while  (! isFinsished);
     }
 
     public static void main(String[] args) throws Exception {
-        ProgressBar pb = new ProgressBar();
-        int size = 1000;
-        for (int i = 0; i < size; i+=10) {
-            PrintWriter writer = new PrintWriter(System.out);
-            pb.update(writer, i, size);
+
+        int total = 1000;
+        ProgressBar progressBar = new ProgressBar(new PrintWriter(System.out), total);
+        progressBar.start();
+        for (int i = 0; i < total; i++) {
+            progressBar.update(10);
             Thread.sleep(250);
         }
+        progressBar.join();
     }
 }

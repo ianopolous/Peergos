@@ -195,14 +195,12 @@ public class CLI implements Runnable {
         else if (!localPath.toFile().getParentFile().isDirectory())
             throw new IllegalStateException("Specified local path '" + localPath.getParent() + "' is not a directory or does not exist.");
 
-        ProgressBar pb = new ProgressBar();
-        BiConsumer<Long, Long> progressConsumer = (bytes, size) -> pb.update(writerForProgress, bytes, size);
-
-        byte[] data = peergosFileSystem.read(remotePath, progressConsumer);
-        writerForProgress.println();
-        writerForProgress.flush();
-
+        long totalSize = checkPath(remotePath).fileProperties().size;
+        ProgressBar pb = new ProgressBar(writerForProgress, totalSize);
+        pb.start();
+        byte[] data = peergosFileSystem.read(remotePath, pb::update);
         Files.write(localPath, data);
+        pb.join();
 
         return "Downloaded " + remotePath + " to " + localPath;
     }
@@ -223,11 +221,10 @@ public class CLI implements Runnable {
         Path remotePath = resolvedRemotePath(remotePathS);
 
         byte[] data = Files.readAllBytes(localPath);
-        ProgressBar pb = new ProgressBar();
-        Consumer<Long> progressConsumer = bytesSoFar -> pb.update(writerForProgress, bytesSoFar, data.length);
-        peergosFileSystem.write(remotePath, data, progressConsumer);
-        writerForProgress.println();
-        writerForProgress.flush();
+        ProgressBar pb = new ProgressBar(writerForProgress, data.length);
+        pb.start();
+        peergosFileSystem.write(remotePath, data, pb::update);
+        pb.join();
         return "Successfully uploaded " + localPath + " to remote " + remotePath;
     }
 
