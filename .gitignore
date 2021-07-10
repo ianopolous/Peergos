@@ -13,3 +13,4 @@ war/*
 peergos/crypto/RootCertificate.java
 peergos/crypto/DirectoryCertificates.java
 peergos/crypto/CoreCertificates.java
+bazel-*

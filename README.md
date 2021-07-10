@@ -203,3 +203,29 @@ ant test
 
 ### Development Notes
 The ``ant compile`` target will only compile sources in src/peergos/{client,server,shared} folders.
+
+### Experimental
+
+Build all targets in all packages
+```
+bazel build //...
+```
+
+Build all targets in a package
+```
+bazel build //src/peergos/shared/util:all 
+```
+
+Build a target in a package
+```
+bazel build //src/peergos/shared/util:ArrayOps 
+```
+
+
+The `--incompatible_restrict_string_escapes=false` is a documented issue to suppress
+
+```
+io_bazel_rules_gwt/gwt/gwt.bzl:119:46: invalid escape sequence: \).
+```
+
+A documented issue https://github.com/bazelbuild/rules_gwt/issues

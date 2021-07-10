@@ -1,0 +1,1 @@
+build --incompatible_restrict_string_escapes=false --javacopt="-source 11 -target 11" --verbose_failures
